@@ -1,23 +1,30 @@
-from servent.communication import Communicator
+from bootstrap import BOOTSTRAP_PORT, BOOTSTRAP_HOST
+from servent.communication import Communicator, Msg
 
 
 class Servent:
-    def __init__(self, port) -> None:
+    def __init__(self, host, port) -> None:
         super().__init__()
-        self.communicator = Communicator(port, self)
+        self.communicator = Communicator(host, port, self.received_message)
         self.communicator.start()
-        if port != 9001:
-            self.communicator.send(9001, "ping")
+        self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.BS_HI)
+        self.id = -1
 
-    def received_message(self, port, message):
-        if "ping" in message:
-            self.communicator.send(port, "pong")
+    def received_message(self, host, port, message):
+        tokens = message.split(" ")
+        if tokens[0] == Msg.BS_YOUR_ID:
+            self.id = int(tokens[1])
+            print("Got id: %d" % self.id)
+            self.communicator.send(host, port, "%s %d" % (Msg.BS_BYE, self.id))
+        else:
+            print(message)
 
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("-ho", "--host", dest="host", type=str, default="localhost")
     parser.add_argument("-p", "--port", dest="port", type=int, required=True)
     args = parser.parse_args()
-    Servent(args.port)
+    Servent(args.host, args.port)

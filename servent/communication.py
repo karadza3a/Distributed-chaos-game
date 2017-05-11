@@ -6,30 +6,30 @@ import re
 
 
 class Communicator(Thread):
-    def __init__(self, listen_port, delegate) -> None:
+    def __init__(self, host, listen_port, delegate_method) -> None:
         super().__init__()
         self.server_socket = socket.socket()
+        self.host = host
         self.listen_port = listen_port
         self.active = True
-        self.delegate = delegate
+        self.delegate_method = delegate_method
 
     def run(self) -> None:
         super().run()
-        self.server_socket.bind(('localhost', self.listen_port))
+        self.server_socket.bind((self.host, self.listen_port))
         self.server_socket.listen(15)  # become a server socket, maximum 5 connections
 
         executor = ThreadPoolExecutor(max_workers=10)
         while self.active:
             client_socket, address = self.server_socket.accept()
-            print("acc: %s" % address[1])
             executor.submit(self.receive_message, client_socket)
         executor.shutdown()
 
-    def send(self, port, message) -> None:
+    def send(self, host, port, message) -> None:
         try:
             client_socket = socket.socket()
-            client_socket.connect(('localhost', port))
-            data = ("%d %s" % (self.listen_port, message)).encode()
+            client_socket.connect((host, port))
+            data = ("(%s:%d) %s" % (self.host, self.listen_port, message)).encode()
             client_socket.sendall(data)
             client_socket.shutdown(socket.SHUT_WR)
 
@@ -53,15 +53,24 @@ class Communicator(Thread):
             sock.sendall(b"ack")
             sock.close()
 
-            r = re.compile('(\d+) (.*)')
+            r = re.compile('\((.*):(\d+)\) (.*)')
             groups = r.match(message.decode()).groups()
             if groups:
-                port = int(groups[0])
-                message = groups[1]
+                host = groups[0]
+                port = int(groups[1])
+                message = groups[2]
             else:
                 return
 
-            self.delegate.received_message(port, message)
+            self.delegate_method(host, port, message)
         except Exception as e:
             print(e)
             raise
+
+
+class Msg:
+    BS_HI = "hi"
+    BS_YOUR_ID = "your_id"  # "your_id {id}"
+    BS_BYE = "bye"  # "bye {id}"
+    BS_NEW_JOB = "new_job"
+    BS_NEW_JOB_ID = "new_job_id"  # "new_job_id {id}"
