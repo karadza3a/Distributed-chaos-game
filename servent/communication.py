@@ -1,8 +1,11 @@
+import random
 import socket
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 import re
+
+import time
 
 
 class Communicator(Thread):
@@ -26,6 +29,7 @@ class Communicator(Thread):
         executor.shutdown()
 
     def send(self, host, port, message) -> None:
+        time.sleep(random.randint(1, 10) * 0.1)
         try:
             client_socket = socket.socket()
             client_socket.connect((host, port))
@@ -69,8 +73,10 @@ class Communicator(Thread):
 
 
 class Msg:
-    BS_HI = "hi"
-    BS_YOUR_ID = "your_id"  # "your_id {id}"
-    BS_BYE = "bye"  # "bye {id}"
-    BS_NEW_JOB = "new_job"
-    BS_NEW_JOB_ID = "new_job_id"  # "new_job_id {id}"
+    bs_new_servent = "new_servent"
+    bs_new_servent_id = "new_servent_id"
+    bs_quit = "quit"
+    bs_only_servent = "only_servent"
+    bs_contact_servent = "contact_servent"
+    bs_new_job = "new_job"
+    bs_new_job_id = "bs_new_job_id"
