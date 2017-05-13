@@ -1,5 +1,4 @@
-from bootstrap import BOOTSTRAP_PORT, BOOTSTRAP_HOST
-from servent.communication import Communicator, Msg
+from common.communication import Communicator, Msg, BOOTSTRAP_PORT, BOOTSTRAP_HOST, CPANEL_PORT, CPANEL_HOST
 
 
 class Servent:
@@ -8,6 +7,8 @@ class Servent:
         self.communicator = Communicator(host, port, self.received_message)
         self.communicator.start()
         self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
+        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "add_node")
+        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "add_edge (%s:%d)" % (BOOTSTRAP_HOST, BOOTSTRAP_PORT))
         self.id = -1
 
     def received_message(self, host, port, message):

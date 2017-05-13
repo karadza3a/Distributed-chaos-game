@@ -1,9 +1,7 @@
 import random
-from servent.communication import Communicator, Msg
 import threading
 
-BOOTSTRAP_HOST = "localhost"
-BOOTSTRAP_PORT = 8970
+from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT, Msg, BOOTSTRAP_HOST, BOOTSTRAP_PORT
 
 
 class Bootstrap:
@@ -15,6 +13,7 @@ class Bootstrap:
         self.servent_id = 0
         self.job_id = 0
         self.servents = {}
+        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "add_bs")
 
     def received_message(self, host, port, message):
         print("%s:%d > %s" % (host, port, message))
@@ -24,9 +23,9 @@ class Bootstrap:
             with self.thread_lock:
                 self.servent_id += 1
                 i = self.servent_id
-                self.servents[i] = (host, port)
                 if len(self.servents) > 0:
                     first = self.servents[random.choice(list(self.servents.keys()))]
+                self.servents[i] = (host, port)
             self.communicator.send(host, port, "%s %d" % (Msg.bs_new_servent_id, i))
             if first is None:
                 self.communicator.send(host, port, Msg.bs_only_servent)

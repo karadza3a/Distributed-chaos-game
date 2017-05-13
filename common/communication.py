@@ -2,10 +2,13 @@ import random
 import socket
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
-
 import re
-
 import time
+
+BOOTSTRAP_HOST = "localhost"
+BOOTSTRAP_PORT = 8970
+CPANEL_HOST = "localhost"
+CPANEL_PORT = 8971
 
 
 class Communicator(Thread):
