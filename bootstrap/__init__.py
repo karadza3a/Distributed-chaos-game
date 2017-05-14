@@ -13,7 +13,7 @@ class Bootstrap:
         self.servent_id = 0
         self.job_id = 0
         self.servents = {}
-        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "add_bs")
+        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "0 add_bs")
 
     def received_message(self, host, port, message):
         print("%s:%d > %s" % (host, port, message))

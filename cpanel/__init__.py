@@ -1,5 +1,5 @@
-import re
 from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT
+from common import helpers
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -13,20 +13,30 @@ class CPanel:
         self.vertices = {}
         self.display_graph()
 
+    last_message_id = {}
+
     def received_message(self, host, port, message):
-        print(message)
-        n_id = "%s:%d" % (host, port)
-        if message == "add_bs":
+        tokens = message.split(" ")
+        n_id = "(%s:%d)" % (host, port)
+
+        m_id = int(tokens[0])
+        if n_id not in self.last_message_id:
+            self.last_message_id[n_id] = -1
+        while self.last_message_id[n_id] != m_id - 1:
+            pass
+        self.last_message_id[n_id] = m_id
+
+        if "add_bs" in message:
             self.graph.add_node(n_id, {'node_type': "Bootstrap"})
-        elif message == "add_node":
+        elif "add_node" in message:
             self.graph.add_node(n_id, {'node_type': "Servent"})
         elif "add_edge" in message:
-            r = re.compile('add_edge \((.*):(\d+)\)')
-            groups = r.match(message).groups()
-            host2 = groups[0]
-            port2 = int(groups[1])
-            n2_id = "%s:%d" % (host2, port2)
-            self.graph.add_edge(n_id, n2_id)
+            temp = tokens[2]
+            n2_id = tokens[3]
+            self.graph.add_edge(n_id, n2_id, {'temp_edge': temp})
+        elif "rm_edge" in message:
+            n2_id = tokens[2]
+            self.graph.remove_edge(n_id, n2_id)
 
     def display_graph(self):
         plt.ion()
