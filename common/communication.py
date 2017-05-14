@@ -106,6 +106,12 @@ class Communicator(Thread):
             self.cpanel_message_id += 1
         self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_edge (%s:%d)" % (msg_id, host2, port2))
 
+    def cpanel_node_id(self, node_id):
+        with self.cpanel_message_lock:
+            msg_id = self.cpanel_message_id
+            self.cpanel_message_id += 1
+        self.send(CPANEL_HOST, CPANEL_PORT, "%d node_id %d" % (msg_id, node_id))
+
 
 class Msg:
     bs_new_servent = "new_servent"

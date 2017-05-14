@@ -1,7 +1,7 @@
 from common import helpers
 from common.communication import *
-from servent import node
-from servent.node import Node
+from servent import node_tools
+from servent.node_tools import Node
 
 
 class Servent:
@@ -14,9 +14,9 @@ class Servent:
 
         self.communicator = Communicator(host, port, self.received_message)
         self.communicator.start()
-        self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
         self.communicator.cpanel_add_node()
-        self.communicator.cpanel_add_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT, False)
+        self.communicator.cpanel_add_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT, True)
+        self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
 
     def received_message(self, host, port, message):
         print("%s:%d > %s" % (host, port, message))
@@ -32,15 +32,18 @@ class Servent:
             pass
 
         if tokens[0] == Msg.bs_only_servent:
-            self.communicator.cpanel_rm_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT)
             self.node.id = 0
             self.num_nodes = 1
+            self.communicator.cpanel_node_id(self.node.id)
+            self.communicator.cpanel_rm_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT)
         elif tokens[0] == Msg.bs_contact_servent:
             h, p = helpers.extract_host_and_port(tokens[1])
+            self.communicator.cpanel_rm_edge(host, port)
+            self.communicator.cpanel_add_edge(h, p, True)
             self.contact_servent(h, p)
-            if (host, port) == (BOOTSTRAP_HOST, BOOTSTRAP_PORT):
-                self.communicator.cpanel_rm_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT)
         elif tokens[0] == Msg.my_child:
+            self.communicator.cpanel_rm_edge(host, port)
+            self.communicator.cpanel_add_edge(host, port, False)
             self.my_child(host, port, tokens[1])
         elif tokens[0] == Msg.need_a_parent:
             self.need_a_parent(host, port)
@@ -87,7 +90,6 @@ class Servent:
 
     def contact_servent(self, host2, port2):
         self.communicator.send(host2, port2, Msg.need_a_parent)
-        self.communicator.cpanel_add_edge(host2, port2, True)
 
     def need_a_parent(self, host, port):
         while self.node.id == -1:
@@ -98,33 +100,33 @@ class Servent:
             retry = False
             n = self.num_nodes
             with self.thread_lock:
-                if n == node.left_child_id(self.node.id):
+                if n == node_tools.left_child_id(self.node.id):
                     if self.node.left_child is None:
                         # init left child
                         self.node.left_child = host, port
-                        left_id = node.left_child_id(self.node.id)
+                        left_id = node_tools.left_child_id(self.node.id)
                         self.communicator.send(host, port, "%s %d" % (Msg.my_child, left_id))
 
                         # tell my left child's previous to connect with my left child
-                        left_child_previous = node.previous_id(left_id)
+                        left_child_previous = node_tools.previous_id(left_id)
                         if left_child_previous != -1:
                             h, p = self.node.next_in_path(left_child_previous)
                             self.communicator.forward(host, port, h, p,
                                                       "%s %d %d" % (Msg.connect_with, left_child_previous, left_id))
                     else:
                         retry = True
-                elif n == node.right_child_id(self.node.id):
+                elif n == node_tools.right_child_id(self.node.id):
                     if self.node.right_child is None:
                         # init right child
                         self.node.right_child = (host, port)
-                        right_i = node.right_child_id(self.node.id)
+                        right_i = node_tools.right_child_id(self.node.id)
                         self.communicator.send(host, port, "%s %d" % (Msg.my_child, right_i))
 
                         # tell my left child to connect with right child
                         assert self.node.left_child is not None
                         h, p = self.node.left_child
                         self.communicator.forward(host, port, h, p,
-                                                  "%s %d %d" % (Msg.connect_with, node.previous_id(right_i), right_i))
+                                                  "%s %d %d" % (Msg.connect_with, node_tools.previous_id(right_i), right_i))
                     else:
                         retry = True
                 else:
@@ -140,23 +142,25 @@ class Servent:
             self.node.id = int(node_id)
             self.num_nodes = self.node.id + 1
             self.node.parent = host, port
+            self.communicator.cpanel_node_id(self.node.id)
+
             self.bc_cnt += 1
             bc_id = "%d:%d" % (self.id, self.bc_cnt)
             message = "%s %d %s" % (Msg.broadcast_num_nodes, self.node.id + 1, bc_id)
             self.broadcast(message)
 
     def connect_with(self, node_id, host, port):
-        if node_id == node.previous_id(self.node.id):
+        if node_id == node_tools.previous_id(self.node.id):
             self.node.previous = host, port
             self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
-        elif node_id == node.next_id(self.node.id):
+        elif node_id == node_tools.next_id(self.node.id):
             self.node.next = host, port
             self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
 
     def connect_with_me(self, node_id, host, port):
-        if node_id == node.previous_id(self.node.id):
+        if node_id == node_tools.previous_id(self.node.id):
             self.node.previous = host, port
-        elif node_id == node.next_id(self.node.id):
+        elif node_id == node_tools.next_id(self.node.id):
             self.node.next = host, port
 
 
