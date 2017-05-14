@@ -8,27 +8,30 @@ class Node:
         self.next = None
         self.previous = None
 
-    def next_in_path(self, destination):
+    def next_in_path(self, destination) -> (str, int):
         i = self.id
         ds = []
         if self.parent is not None:
             d = dist(destination, parent_id(i))
-            ds.append((d, self.parent))
+            ds.append((d, 0, self.parent))
         if self.left_child is not None:
             d = dist(destination, left_child_id(i))
-            ds.append((d, self.left_child))
+            ds.append((d, 2, self.left_child))
         if self.right_child is not None:
             d = dist(destination, right_child_id(i))
-            ds.append((d, self.right_child))
+            ds.append((d, 2, self.right_child))
         if self.next is not None:
             d = dist(destination, next_id(i))
-            ds.append((d, self.next))
+            ds.append((d, 1, self.next))
         if self.previous is not None:
             d = dist(destination, previous_id(i))
-            ds.append((d, self.previous))
-        print(ds)
+            ds.append((d, 1, self.previous))
+        if len(ds) == 0:
+            return None
         ds.sort()
-        return ds[0][1]
+        print(ds)
+        d, preference, node = ds[0]
+        return node
 
 
 __dist_cache = {}
@@ -41,7 +44,7 @@ def dist(a, b):
         return __dist_cache[(a, b)]
 
     al = level(a)
-    bl = level(a)
+    bl = level(b)
     if al < bl:
         d = dist(a, parent_id(b)) + 1
     elif al > bl:

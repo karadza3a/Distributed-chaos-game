@@ -56,7 +56,7 @@ class CPanel:
                 plt.xlim(-0.2, 2.2)
                 plt.ylim(-0.2, 1.2)
             finally:
-                plt.pause(0.5)
+                plt.pause(0.1)
 
     @staticmethod
     def custom_layout(graph) -> dict:
@@ -186,8 +186,9 @@ class Mock:
 
 
 if __name__ == '__main__':
-    CPanel().display_graph()
+    c = CPanel()
     print("CPanel listening on port %d" % CPANEL_PORT)
+    c.display_graph()
 
     # m = Mock()
     # import threading

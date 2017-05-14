@@ -50,17 +50,25 @@ class Servent:
         elif tokens[0] == Msg.broadcast_num_nodes:
             self.num_nodes = int(tokens[1])
         elif tokens[0] == Msg.connect_with:
+            while self.node.id == -1:
+                pass
+
             r_id = int(tokens[1])
             if r_id == self.node.id:
+                # I am the recipient
                 s_id = int(tokens[2])
                 self.connect_with(s_id, host, port)
             else:
-                h, p = self.node.next_in_path(r_id)
+                # forward to the recipient
+                next_node = self.node.next_in_path(r_id)
+                while next_node is None:
+                    next_node = self.node.next_in_path(r_id)
+                h, p = next_node
                 self.communicator.forward(host, port, h, p, message)
         elif tokens[0] == Msg.connect_with_me:
             self.connect_with_me(int(tokens[1]), host, port)
         else:
-            print(message)
+            print("Unrecognized " + message)
 
     broadcasts_cache = set()
 
@@ -126,11 +134,12 @@ class Servent:
                         assert self.node.left_child is not None
                         h, p = self.node.left_child
                         self.communicator.forward(host, port, h, p,
-                                                  "%s %d %d" % (Msg.connect_with, node_tools.previous_id(right_i), right_i))
+                                                  "%s %d %d" % (
+                                                      Msg.connect_with, node_tools.previous_id(right_i), right_i))
                     else:
                         retry = True
                 else:
-                    next_node = self.node.next_in_path(n)
+                    next_node = self.node.next_in_path(node_tools.parent_id(n))
                     if next_node is not None:
                         h, p = next_node
                         self.communicator.send(host, port, "%s (%s:%d)" % (Msg.bs_contact_servent, h, p))
@@ -150,14 +159,22 @@ class Servent:
             self.broadcast(message)
 
     def connect_with(self, node_id, host, port):
+        while self.node.id == -1:
+            pass
+
         if node_id == node_tools.previous_id(self.node.id):
             self.node.previous = host, port
             self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
+            self.communicator.cpanel_add_edge(host, port, False)
         elif node_id == node_tools.next_id(self.node.id):
             self.node.next = host, port
             self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
+            self.communicator.cpanel_add_edge(host, port, False)
 
     def connect_with_me(self, node_id, host, port):
+        while self.node.id == -1:
+            pass
+
         if node_id == node_tools.previous_id(self.node.id):
             self.node.previous = host, port
         elif node_id == node_tools.next_id(self.node.id):
