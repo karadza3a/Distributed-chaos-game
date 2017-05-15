@@ -1,3 +1,7 @@
+import argparse
+import threading
+
+import logging
 import matplotlib.pyplot as plt
 import networkx as nx
 from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT
@@ -15,7 +19,7 @@ class CPanel:
     last_message_id = {}
 
     def received_message(self, host, port, message):
-        print("%s:%d > %s" % (host, port, message))
+        logging.info("%s:%d > %s" % (host, port, message))
         tokens = message.split(" ")
         n_id = "(%s:%d)" % (host, port)
 
@@ -44,7 +48,7 @@ class CPanel:
         plt.ion()
         plt.rcParams['axes.facecolor'] = 'black'
         plt.show()
-        while True:
+        while c.communicator.active:
             try:
                 plt.clf()
                 graph_copy = nx.Graph(self.graph)
@@ -56,7 +60,9 @@ class CPanel:
                 plt.xlim(-0.2, 2.2)
                 plt.ylim(-0.2, 1.2)
             finally:
-                plt.pause(0.1)
+                plt.pause(0.05)
+        plt.ioff()
+        plt.close("all")
 
     @staticmethod
     def custom_layout(graph) -> dict:
@@ -108,6 +114,16 @@ class CPanel:
             positions[node] = tree_positions[node_id]
 
         return positions
+
+    def input_loop(self):
+        while True:
+            input_cmd = input("q to quit:")
+            if input_cmd == "q":
+                break
+
+        print("Quitting...")
+        self.communicator.active = False
+        print("bye")
 
 
 class Mock:
@@ -170,25 +186,30 @@ class Mock:
     c = None
 
     def next_message(self, i):
-        print("- " + str(i))
         self.c.received_message(*self.msgs[i])
 
     def while_messages(self):
-        import threading
         while self.c is None:
             pass
         i = 0
         while i < len(self.msgs):
-            print(i)
             t2 = threading.Thread(target=self.next_message(i))
             t2.start()
             i += 1
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
+    args = parser.parse_args()
+    logging.basicConfig(filename=args.log_file, level=logging.DEBUG, filemode="w")
+
     c = CPanel()
-    print("CPanel listening on port %d" % CPANEL_PORT)
-    c.display_graph()
+    print("CPanel listening on port %d..." % CPANEL_PORT)
+    input_thread = threading.Thread(target=c.input_loop)
+    input_thread.start()
+    c.display_graph()  # this will return only when stopped (active == false)
+    c.communicator.join(100)
 
     # m = Mock()
     # import threading

@@ -8,6 +8,8 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
+import logging
+
 BOOTSTRAP_HOST = "localhost"
 BOOTSTRAP_PORT = 8970
 CPANEL_HOST = "localhost"
@@ -26,12 +28,17 @@ class Communicator(Thread):
     def run(self) -> None:
         super().run()
         self.server_socket.bind((self.host, self.listen_port))
-        self.server_socket.listen(15)  # become a server socket, maximum 5 connections
+        self.server_socket.listen(30)
 
-        executor = ThreadPoolExecutor(max_workers=10)
+        executor = ThreadPoolExecutor(max_workers=50)
+        self.server_socket.settimeout(2)
         while self.active:
-            client_socket, address = self.server_socket.accept()
-            executor.submit(self.receive_message, client_socket)
+            try:
+                client_socket, address = self.server_socket.accept()
+                executor.submit(self.receive_message, client_socket)
+            except socket.timeout:
+                pass
+        self.server_socket.close()
         executor.shutdown()
 
     def forward(self, from_host, from_port, to_host, to_port, message) -> None:
@@ -42,7 +49,7 @@ class Communicator(Thread):
 
     @staticmethod
     def _raw_send(from_host, from_port, to_host, to_port, message) -> None:
-        time.sleep(random.randint(1, 10) * 0.1)
+        time.sleep(random.randint(1, 10) * 0.001)
         try:
             client_socket = socket.socket()
             client_socket.connect((to_host, to_port))
@@ -55,7 +62,7 @@ class Communicator(Thread):
             if buf != b"ack":
                 raise ConnectionError("Ack not received!")
         except Exception as e:
-            traceback.print_exc(file=sys.stderr)
+            logging.exception("Error sending!")
             raise
 
     def receive_message(self, sock) -> None:
@@ -81,7 +88,7 @@ class Communicator(Thread):
 
             self.delegate_method(host, port, message)
         except Exception as e:
-            traceback.print_exc(file=sys.stderr)
+            logging.exception("Error receiving!")
             raise
 
     cpanel_message_id = 0

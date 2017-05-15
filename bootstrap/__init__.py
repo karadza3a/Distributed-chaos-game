@@ -1,6 +1,7 @@
+import argparse
+import logging
 import random
 import threading
-
 from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT, Msg, BOOTSTRAP_HOST, BOOTSTRAP_PORT
 
 
@@ -16,7 +17,7 @@ class Bootstrap:
         self.communicator.send(CPANEL_HOST, CPANEL_PORT, "0 add_bs")
 
     def received_message(self, host, port, message):
-        print("%s:%d > %s" % (host, port, message))
+        logging.info("%s:%d > %s" % (host, port, message))
         tokens = message.split(" ")
         if tokens[0] == Msg.bs_new_servent:
             first = None
@@ -43,5 +44,20 @@ class Bootstrap:
 
 
 if __name__ == '__main__':
-    Bootstrap()
-    print("Bootstrap listening on port %d" % BOOTSTRAP_PORT)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
+    args = parser.parse_args()
+    logging.basicConfig(filename=args.log_file, level=logging.DEBUG, filemode="w")
+
+    b = Bootstrap()
+    print("Bootstrap listening on port %d..." % BOOTSTRAP_PORT)
+
+    while True:
+        input_cmd = input("q to quit:")
+        if input_cmd == "q":
+            break
+
+    print("Quitting...")
+    b.communicator.active = False
+    b.communicator.join(100)
+    print("bye")

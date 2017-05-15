@@ -1,3 +1,6 @@
+import logging
+
+
 class Node:
     def __init__(self) -> None:
         super().__init__()
@@ -29,7 +32,7 @@ class Node:
         if len(ds) == 0:
             return None
         ds.sort()
-        print(ds)
+        logging.debug(ds)
         d, preference, node = ds[0]
         return node
 

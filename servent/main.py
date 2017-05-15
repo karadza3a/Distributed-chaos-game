@@ -1,3 +1,5 @@
+import argparse
+
 from common import helpers
 from common.communication import *
 from servent import node_tools
@@ -19,7 +21,7 @@ class Servent:
         self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
 
     def received_message(self, host, port, message):
-        print("%s:%d > %s" % (host, port, message))
+        logging.info("%s:%d > %s" % (host, port, message))
         tokens = message.split(" ")
         if tokens[0] == Msg.bs_new_servent_id:
             self.id = int(tokens[1])
@@ -68,7 +70,7 @@ class Servent:
         elif tokens[0] == Msg.connect_with_me:
             self.connect_with_me(int(tokens[1]), host, port)
         else:
-            print("Unrecognized " + message)
+            logging.debug("Unrecognized " + message)
 
     broadcasts_cache = set()
 
@@ -182,10 +184,20 @@ class Servent:
 
 
 if __name__ == '__main__':
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument("-ho", "--host", dest="host", type=str, default="localhost")
     parser.add_argument("-p", "--port", dest="port", type=int, required=True)
+    parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
     args = parser.parse_args()
-    Servent(args.host, args.port)
+    logging.basicConfig(filename=args.log_file, level=logging.DEBUG, filemode="w")
+    s = Servent(args.host, args.port)
+
+    while True:
+        i = input("q to quit:")
+        if i == "q":
+            break
+
+    print("Quitting...")
+    s.communicator.active = False
+    s.communicator.join(100)
+    print("bye")
