@@ -1,14 +1,11 @@
+import logging
 import random
 import re
 import socket
-import sys
 import threading
 import time
-import traceback
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
-
-import logging
 
 BOOTSTRAP_HOST = "localhost"
 BOOTSTRAP_PORT = 8970
@@ -126,10 +123,12 @@ class Msg:
     bs_quit = "quit"
     bs_only_servent = "only_servent"
     bs_contact_servent = "contact_servent"
-    bs_new_job = "new_job"
-    bs_new_job_id = "bs_new_job_id"
     need_a_parent = "need_a_parent"
     my_child = "my_child"
     connect_with = "connect_with"
     connect_with_me = "connect_with_me"
     broadcast_num_nodes = "broadcast_num_nodes"
+    broadcast_new_job = "broadcast_new_job"
+    broadcast_remove_job = "broadcast_remove_job"
+    broadcast_show_job = "broadcast_show_job"
+    job_data = "job_data"

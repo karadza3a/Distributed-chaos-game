@@ -2,7 +2,8 @@ import argparse
 
 from common import helpers
 from common.communication import *
-from servent import node_tools
+from servent import node_tools, chaos
+from servent.chaos import Chaos, random_points
 from servent.node_tools import Node
 
 
@@ -12,7 +13,14 @@ class Servent:
         self.node = Node()
         self.num_nodes = 0
         self.bc_cnt = 0
+        self.job_cnt = 0
+        self.active_jobs = {}
+        self.active_job_id = None
+        self.need_job_data_for = None
+        self.need_job_data_from = None
         self.thread_lock = threading.Lock()
+        job_worker_thread = Thread(target=self.job_worker)
+        job_worker_thread.start()
 
         self.communicator = Communicator(host, port, self.received_message)
         self.communicator.start()
@@ -52,23 +60,18 @@ class Servent:
         elif tokens[0] == Msg.broadcast_num_nodes:
             self.num_nodes = int(tokens[1])
         elif tokens[0] == Msg.connect_with:
-            while self.node.id == -1:
-                pass
-
-            r_id = int(tokens[1])
-            if r_id == self.node.id:
-                # I am the recipient
-                s_id = int(tokens[2])
-                self.connect_with(s_id, host, port)
-            else:
-                # forward to the recipient
-                next_node = self.node.next_in_path(r_id)
-                while next_node is None:
-                    next_node = self.node.next_in_path(r_id)
-                h, p = next_node
-                self.communicator.forward(host, port, h, p, message)
-        elif tokens[0] == Msg.connect_with_me:
-            self.connect_with_me(int(tokens[1]), host, port)
+            self.connect_with(host, port, message, tokens)
+        elif tokens[0] == Msg.broadcast_new_job:
+            # {job_id} {base_points} {ratio} {width} {height}
+            job = Chaos(tokens[1], eval(tokens[2]), float(tokens[3]), int(tokens[4]), int(tokens[5]))
+            self.new_job(job)
+        elif tokens[0] == Msg.broadcast_show_job:
+            h, p = helpers.extract_host_and_port(tokens[2])
+            self.show_job(tokens[1], h, p)
+        elif tokens[0] == Msg.broadcast_remove_job:
+            self.remove_job(tokens[1])
+        elif tokens[0] == Msg.job_data:
+            self.job_data(tokens[1], int(tokens[2]), eval(tokens[3]))
         else:
             logging.debug("Unrecognized " + message)
 
@@ -160,18 +163,29 @@ class Servent:
             message = "%s %d %s" % (Msg.broadcast_num_nodes, self.node.id + 1, bc_id)
             self.broadcast(message)
 
-    def connect_with(self, node_id, host, port):
+    def connect_with(self, host, port, message, tokens):
         while self.node.id == -1:
             pass
 
-        if node_id == node_tools.previous_id(self.node.id):
-            self.node.previous = host, port
-            self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
-            self.communicator.cpanel_add_edge(host, port, False)
-        elif node_id == node_tools.next_id(self.node.id):
-            self.node.next = host, port
-            self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
-            self.communicator.cpanel_add_edge(host, port, False)
+        r_id = int(tokens[1])
+        if r_id == self.node.id:
+            # I am the recipient
+            node_id = int(tokens[2])
+            if node_id == node_tools.previous_id(self.node.id):
+                self.node.previous = host, port
+                self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
+                self.communicator.cpanel_add_edge(host, port, False)
+            elif node_id == node_tools.next_id(self.node.id):
+                self.node.next = host, port
+                self.communicator.send(host, port, "%s %d" % (Msg.connect_with_me, self.node.id))
+                self.communicator.cpanel_add_edge(host, port, False)
+        else:
+            # forward to the recipient
+            next_node = self.node.next_in_path(r_id)
+            while next_node is None:
+                next_node = self.node.next_in_path(r_id)
+            h, p = next_node
+            self.communicator.forward(host, port, h, p, message)
 
     def connect_with_me(self, node_id, host, port):
         while self.node.id == -1:
@@ -181,6 +195,95 @@ class Servent:
             self.node.previous = host, port
         elif node_id == node_tools.next_id(self.node.id):
             self.node.next = host, port
+
+    # --------- jobs ---------
+
+    def job_worker(self):
+        while True:
+            time.sleep(.5)
+            if self.active_job_id is not None:
+                job = self.active_jobs[self.active_job_id]  # type: Chaos
+                job.calculate_next()
+
+    def new_job(self, job):
+        with self.thread_lock:
+            self.active_jobs[job.id] = job
+            self.reassign_jobs()
+
+    def remove_job(self, job_id):
+        max_wait_seconds = 15
+        while job_id not in self.active_jobs:
+            if max_wait_seconds < 0:
+                return
+            time.sleep(.1)
+            max_wait_seconds -= .1
+
+        with self.thread_lock:
+            if job_id == self.active_job_id:
+                self.active_job_id = None
+            self.active_jobs.pop(job_id)
+            self.reassign_jobs()
+
+    def reassign_jobs(self):
+        assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+        if self.active_job_id is not None and assigned_jobs[self.node.id] != self.active_job_id:
+            # TODO send old data to new node
+            pass
+        if self.node.id in assigned_jobs:
+            self.active_job_id = assigned_jobs[self.node.id]
+
+    def show_job(self, job_id, h, p):
+        if job_id == self.active_job_id:
+            job = self.active_jobs[job_id]  # type: Chaos
+            points = str(job.calculated_points).replace(" ", "")
+            self.communicator.send(h, p, " ".join((Msg.job_data, job_id, str(self.node.id), points)))
+
+    def job_data(self, job_id, node_id, points):
+        if self.need_job_data_for == job_id:
+            job = self.active_jobs[job_id]  # type: Chaos
+            job.calculated_points.extend(points)
+            self.need_job_data_from.remove(node_id)
+
+    # ------ handle user input ------
+
+    def user_quit(self):
+        pass
+
+    def user_start_job(self, n, ratio, width, height):
+        with self.thread_lock:
+            self.job_cnt += 1
+            job_id = "%d:%d" % (self.id, self.job_cnt)
+            job = Chaos(job_id, random_points(n, width, height), ratio, width, height)
+
+        print("started job %s!" % job_id)
+        self.new_job(job)
+        self.broadcast(job.message())
+
+    def user_stop_job(self, job_id):
+        self.remove_job(job_id)
+        self.broadcast(Msg.broadcast_remove_job + job_id)
+
+    def user_show_job(self, job_id):
+        if job_id not in self.active_jobs:
+            print("unknown id")
+
+        self.need_job_data_for = job_id
+        assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+        self.need_job_data_from = set([node_id for node_id, a_job_id in assigned_jobs.items() if job_id == a_job_id])
+
+        my_hp = "(%s:%d)" % (self.communicator.host, self.communicator.listen_port)
+        self.broadcast(" ".join((Msg.broadcast_show_job, job_id, my_hp)))
+
+        max_wait_seconds = 15
+        while len(self.need_job_data_from) > 0:
+            if max_wait_seconds < 0:
+                return
+            time.sleep(.1)
+            max_wait_seconds -= .1
+
+        print("showing...")
+        job = self.active_jobs[job_id]
+        job.show()
 
 
 if __name__ == '__main__':
@@ -193,9 +296,23 @@ if __name__ == '__main__':
     s = Servent(args.host, args.port)
 
     while True:
-        i = input("q to quit:")
-        if i == "q":
-            break
+        input_str = input("q to quit:")
+        try:
+            if input_str == "q":
+                break
+            if "start" in input_str:
+                tokens = input_str.split(" ")
+                n = int(tokens[1])
+                r = float(tokens[2])
+                w = int(tokens[3])
+                h = int(tokens[4])
+                s.user_start_job(n, r, w, h)
+            if "show" in input_str:
+                s.user_show_job(input_str.split(" ")[1])
+            if "stop" in input_str:
+                s.user_stop_job(input_str.split(" ")[1])
+        except Exception as e:
+            logging.exception(e)
 
     print("Quitting...")
     s.communicator.active = False

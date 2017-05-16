@@ -34,7 +34,7 @@ class Interface(tk.Frame):
         if port in self.servents:
             s = self.servents[port]  # type: pexpect.spawn
             s.send(self.msg_input.get() + "\n")
-            print(s.expect(".*\n"))
+            print(s.expect(["started job .*!", "showing...", "unknown id"]))
         else:
             print("Servent not found")
 
