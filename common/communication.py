@@ -7,8 +7,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
-SERVENT_HOST = "localhost"
-BOOTSTRAP_HOST = "localhost"
+SERVENT_HOST = "localhost"  # "192.168.1.7"
+BOOTSTRAP_HOST = "localhost"  # "192.168.1.7"
 BOOTSTRAP_PORT = 8999
 CPANEL_HOST = SERVENT_HOST
 CPANEL_PORT = 8971
@@ -49,7 +49,6 @@ class Communicator(Thread):
 
     @staticmethod
     def _raw_send(from_host, from_port, to_host, to_port, message) -> None:
-        time.sleep(random.randint(1, 10) * 0.001)
         try:
             client_socket = socket.socket()
             client_socket.connect((to_host, to_port))
@@ -66,6 +65,7 @@ class Communicator(Thread):
             raise
 
     def receive_message(self, sock) -> None:
+        time.sleep(random.randint(1, 50) * 0.01)
         message = b""
         try:
             while True:
