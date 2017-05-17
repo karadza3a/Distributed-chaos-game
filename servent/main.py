@@ -1,5 +1,4 @@
 import argparse
-
 from common import helpers
 from common.communication import *
 from servent import node_tools, chaos
@@ -286,7 +285,7 @@ class Servent:
         job.show()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-ho", "--host", dest="host", type=str, default=SERVENT_HOST)
     parser.add_argument("-p", "--port", dest="port", type=int, required=True)
@@ -318,3 +317,7 @@ if __name__ == '__main__':
     s.communicator.active = False
     s.communicator.join(100)
     print("bye")
+
+
+if __name__ == '__main__':
+    main()

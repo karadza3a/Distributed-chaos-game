@@ -1,0 +1,6 @@
+SERVENT_HOST = "localhost"
+BOOTSTRAP_HOST = "localhost"
+BOOTSTRAP_PORT = 8999
+CPANEL_HOST = "localhost"
+CPANEL_PORT = 8971
+ENABLE_CPANEL = True

@@ -7,13 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
-SERVENT_HOST = "localhost"  # "192.168.1.7"
-BOOTSTRAP_HOST = "localhost"  # "192.168.1.7"
-BOOTSTRAP_PORT = 8999
-CPANEL_HOST = SERVENT_HOST
-CPANEL_PORT = 8971
-
-ENABLE_CPANEL = False
+from common.config import *
 
 
 class Communicator(Thread):
@@ -60,7 +54,7 @@ class Communicator(Thread):
             client_socket.close()
             if buf != b"ack\n":
                 raise ConnectionError("Ack not received!")
-        except Exception as e:
+        except Exception:
             logging.exception("Error sending!")
             raise
 
@@ -87,7 +81,7 @@ class Communicator(Thread):
                 return
 
             self.delegate_method(host, port, message)
-        except Exception as e:
+        except Exception:
             logging.exception("Error receiving!")
             raise
 

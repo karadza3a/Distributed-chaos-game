@@ -1,10 +1,10 @@
 import argparse
 import threading
-
 import logging
 import matplotlib.pyplot as plt
 import networkx as nx
-from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT
+from common.communication import Communicator
+from common.config import *
 from servent import node_tools
 
 
@@ -47,8 +47,11 @@ class CPanel:
     def display_graph(self):
         plt.ion()
         plt.rcParams['axes.facecolor'] = 'black'
+        # figplt.figure()
         plt.show()
-        while c.communicator.active:
+        # manager = plt.get_current_fig_manager()
+        # manager.window.SetPosition((500, 0))
+        while self.communicator.active:
             try:
                 plt.clf()
                 graph_copy = nx.Graph(self.graph)
@@ -126,79 +129,7 @@ class CPanel:
         print("bye")
 
 
-class Mock:
-    msgs = [
-        ("localhost", 8970, "0 add_bs"),
-        ("localhost", 9001, "0 add_node"),
-        ("localhost", 9006, "0 add_node"),
-        ("localhost", 9005, "0 add_node"),
-        ("localhost", 9000, "0 add_node"),
-        ("localhost", 9003, "0 add_node"),
-        ("localhost", 9004, "0 add_node"),
-        ("localhost", 9002, "0 add_node"),
-        ("localhost", 9001, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9005, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9002, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9000, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9003, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9006, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9004, "1 add_edge t (localhost:8970)"),
-        ("localhost", 9003, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9005, "2 node_id 0"),
-        ("localhost", 9000, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9001, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9001, "3 add_edge t (localhost:9003)"),
-        ("localhost", 9005, "3 rm_edge (localhost:8970)"),
-        ("localhost", 9006, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9004, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9003, "3 add_edge t (localhost:9005)"),
-        ("localhost", 9002, "2 rm_edge (localhost:8970)"),
-        ("localhost", 9004, "3 add_edge t (localhost:9000)"),
-        ("localhost", 9002, "3 add_edge t (localhost:9003)"),
-        ("localhost", 9000, "3 add_edge t (localhost:9003)"),
-        ("localhost", 9006, "3 add_edge t (localhost:9002)"),
-        ("localhost", 9003, "4 rm_edge (localhost:9005)"),
-        ("localhost", 9003, "5 add_edge p (localhost:9005)"),
-        ("localhost", 9003, "6 node_id 1"),
-        ("localhost", 9001, "4 rm_edge (localhost:9003)"),
-        ("localhost", 9000, "4 rm_edge (localhost:9003)"),
-        ("localhost", 9002, "4 rm_edge (localhost:9003)"),
-        ("localhost", 9001, "5 add_edge t (localhost:9005)"),
-        ("localhost", 9000, "5 add_edge t (localhost:9005)"),
-        ("localhost", 9002, "5 add_edge t (localhost:9005)"),
-        ("localhost", 9001, "6 rm_edge (localhost:9005)"),
-        ("localhost", 9001, "7 add_edge p (localhost:9005)"),
-        ("localhost", 9001, "8 node_id 2"),
-        ("localhost", 9002, "6 rm_edge (localhost:9005)"),
-        ("localhost", 9000, "6 rm_edge (localhost:9005)"),
-        ("localhost", 9000, "7 add_edge t (localhost:9001)"),
-        ("localhost", 9002, "7 add_edge t (localhost:9001)"),
-        ("localhost", 9000, "8 rm_edge (localhost:9001)"),
-        ("localhost", 9002, "8 rm_edge (localhost:9001)"),
-        ("localhost", 9002, "9 add_edge t (localhost:9005)"),
-        ("localhost", 9000, "9 add_edge t (localhost:9005)"),
-        ("localhost", 9002, "10 rm_edge (localhost:9005)"),
-        ("localhost", 9000, "10 rm_edge (localhost:9005)"),
-        ("localhost", 9002, "11 add_edge t (localhost:9001)"),
-        ("localhost", 9000, "11 add_edge t (localhost:9001)"),
-    ]
-
-    c = None
-
-    def next_message(self, i):
-        self.c.received_message(*self.msgs[i])
-
-    def while_messages(self):
-        while self.c is None:
-            pass
-        i = 0
-        while i < len(self.msgs):
-            t2 = threading.Thread(target=self.next_message(i))
-            t2.start()
-            i += 1
-
-
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
     args = parser.parse_args()
@@ -208,7 +139,8 @@ if __name__ == '__main__':
     print("CPanel listening on port %d..." % CPANEL_PORT)
     input_thread = threading.Thread(target=c.input_loop)
     input_thread.start()
-    c.display_graph()  # this will return only when stopped (active == false)
+    c.display_graph()  # this will return only when stopped (active == False) or in case an exception is thrown
+    c.communicator.active = False  # this should already be set to False, but just in case any exception is thrown
     c.communicator.join(100)
 
     # m = Mock()
@@ -217,3 +149,7 @@ if __name__ == '__main__':
     # t1.start()
     # m.c = CPanel()
     # m.c.display_graph()
+
+
+if __name__ == '__main__':
+    main()

@@ -2,8 +2,8 @@ import argparse
 import logging
 import random
 import threading
-from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT, Msg, BOOTSTRAP_HOST, BOOTSTRAP_PORT, \
-    ENABLE_CPANEL
+from common.communication import Communicator, Msg
+from common.config import *
 
 
 class Bootstrap:
@@ -39,7 +39,7 @@ class Bootstrap:
                 self.servents.pop(i)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
     args = parser.parse_args()
@@ -57,3 +57,7 @@ if __name__ == '__main__':
     b.communicator.active = False
     b.communicator.join(100)
     print("bye")
+
+
+if __name__ == '__main__':
+    main()
