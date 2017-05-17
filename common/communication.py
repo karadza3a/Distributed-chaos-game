@@ -7,10 +7,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
+SERVENT_HOST = "localhost"
 BOOTSTRAP_HOST = "localhost"
-BOOTSTRAP_PORT = 8970
-CPANEL_HOST = "localhost"
+BOOTSTRAP_PORT = 8999
+CPANEL_HOST = SERVENT_HOST
 CPANEL_PORT = 8971
+
+ENABLE_CPANEL = False
 
 
 class Communicator(Thread):
@@ -56,7 +59,7 @@ class Communicator(Thread):
 
             buf = client_socket.recv(16)
             client_socket.close()
-            if buf != b"ack":
+            if buf != b"ack\n":
                 raise ConnectionError("Ack not received!")
         except Exception as e:
             logging.exception("Error sending!")
@@ -71,7 +74,7 @@ class Communicator(Thread):
                     message += buf
                 else:
                     break
-            sock.sendall(b"ack")
+            sock.sendall(b"ack\n")
             sock.close()
 
             r = re.compile('\((.*):(\d+)\) (.*)')
@@ -92,29 +95,33 @@ class Communicator(Thread):
     cpanel_message_lock = threading.Lock()
 
     def cpanel_add_node(self):
-        with self.cpanel_message_lock:
-            msg_id = self.cpanel_message_id
-            self.cpanel_message_id += 1
-        self.send(CPANEL_HOST, CPANEL_PORT, "%d add_node" % msg_id)
+        if ENABLE_CPANEL:
+            with self.cpanel_message_lock:
+                msg_id = self.cpanel_message_id
+                self.cpanel_message_id += 1
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d add_node" % msg_id)
 
     def cpanel_add_edge(self, host2, port2, temp):
-        with self.cpanel_message_lock:
-            msg_id = self.cpanel_message_id
-            self.cpanel_message_id += 1
-        t = "t" if temp else "p"
-        self.send(CPANEL_HOST, CPANEL_PORT, "%d add_edge %s (%s:%d)" % (msg_id, t, host2, port2))
+        if ENABLE_CPANEL:
+            with self.cpanel_message_lock:
+                msg_id = self.cpanel_message_id
+                self.cpanel_message_id += 1
+            t = "t" if temp else "p"
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d add_edge %s (%s:%d)" % (msg_id, t, host2, port2))
 
     def cpanel_rm_edge(self, host2, port2):
-        with self.cpanel_message_lock:
-            msg_id = self.cpanel_message_id
-            self.cpanel_message_id += 1
-        self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_edge (%s:%d)" % (msg_id, host2, port2))
+        if ENABLE_CPANEL:
+            with self.cpanel_message_lock:
+                msg_id = self.cpanel_message_id
+                self.cpanel_message_id += 1
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_edge (%s:%d)" % (msg_id, host2, port2))
 
     def cpanel_node_id(self, node_id):
-        with self.cpanel_message_lock:
-            msg_id = self.cpanel_message_id
-            self.cpanel_message_id += 1
-        self.send(CPANEL_HOST, CPANEL_PORT, "%d node_id %d" % (msg_id, node_id))
+        if ENABLE_CPANEL:
+            with self.cpanel_message_lock:
+                msg_id = self.cpanel_message_id
+                self.cpanel_message_id += 1
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d node_id %d" % (msg_id, node_id))
 
 
 class Msg:

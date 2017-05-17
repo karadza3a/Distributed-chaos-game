@@ -1,6 +1,4 @@
 import random
-
-import matplotlib.pyplot as plt
 from common.communication import Msg
 
 
@@ -24,6 +22,7 @@ class Chaos:
         self.calculated_points.append(new_point)
 
     def show(self):
+        import matplotlib.pyplot as plt
         plt.scatter(*zip(*self.base_points), s=20)
         plt.scatter(*zip(*self.calculated_points), s=1)
         plt.show()

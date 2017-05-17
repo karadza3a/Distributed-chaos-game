@@ -288,7 +288,7 @@ class Servent:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-ho", "--host", dest="host", type=str, default="localhost")
+    parser.add_argument("-ho", "--host", dest="host", type=str, default=SERVENT_HOST)
     parser.add_argument("-p", "--port", dest="port", type=int, required=True)
     parser.add_argument("-l", "--log_file", dest="log_file", type=str, required=True)
     args = parser.parse_args()

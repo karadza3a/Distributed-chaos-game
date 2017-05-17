@@ -2,7 +2,8 @@ import argparse
 import logging
 import random
 import threading
-from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT, Msg, BOOTSTRAP_HOST, BOOTSTRAP_PORT
+from common.communication import Communicator, CPANEL_HOST, CPANEL_PORT, Msg, BOOTSTRAP_HOST, BOOTSTRAP_PORT, \
+    ENABLE_CPANEL
 
 
 class Bootstrap:
@@ -12,9 +13,9 @@ class Bootstrap:
         self.communicator = Communicator(BOOTSTRAP_HOST, BOOTSTRAP_PORT, self.received_message)
         self.communicator.start()
         self.servent_id = 0
-        self.job_id = 0
         self.servents = {}
-        self.communicator.send(CPANEL_HOST, CPANEL_PORT, "0 add_bs")
+        if ENABLE_CPANEL:
+            self.communicator.send(CPANEL_HOST, CPANEL_PORT, "0 add_bs")
 
     def received_message(self, host, port, message):
         logging.info("%s:%d > %s" % (host, port, message))
@@ -36,11 +37,6 @@ class Bootstrap:
             with self.thread_lock:
                 i = int(tokens[1])
                 self.servents.pop(i)
-        elif tokens[0] == Msg.bs_new_job:
-            with self.thread_lock:
-                self.job_id += 1
-                i = self.job_id
-            self.communicator.send(host, port, "%s %d" % (Msg.bs_new_job_id, i))
 
 
 if __name__ == '__main__':
