@@ -1,4 +1,6 @@
 import os
+import traceback
+
 from appJar import gui
 from threading import Thread
 import pexpect as pexpect
@@ -17,27 +19,43 @@ class Interface:
         self.servents = {}
         self.next_port = START_PORT
 
-    def send_command(self, port, msg):
+    def send_servent_command(self, port, msg):
         if port in self.servents:
             s = self.servents[port]  # type: pexpect.spawn
             s.send(msg + "\n")
             s.expect(["started job .*!", "showing...", "unknown id"])
-            output = self.app.getTextArea("output") + "\n" + str(s.match)
+            output = self.app.getTextArea("output") + "\n" + str(s.match.string)
             self.app.setTextArea("output", output)
         else:
             print("Servent not found")
 
+    def send_cpanel_command(self, msg):
+        if self.cpanel_started:
+            comm.Communicator.cpanel_input_command(msg)
+        else:
+            print("Cpanel not started")
+
     def quit(self):
         for s in self.servents.values():  # type: pexpect.spawn
-            s.sendline("q")
-            s.expect("Quitting...")
-            s.expect("bye")
-        if self.bootstrap_started:
-            self.bootstrap.sendline("q")
-            self.bootstrap.expect("Quitting...")
-        if self.cpanel_started:
-            self.bootstrap.expect("bye")
-            self.cpanel.sendline("q")
+            try:
+                s.sendline("q")
+                s.expect("Quitting...")
+                s.expect("bye")
+            except OSError:
+                traceback.print_exc()
+
+        try:
+            if self.bootstrap_started:
+                self.bootstrap.sendline("q")
+                self.bootstrap.expect("Quitting...")
+        except OSError:
+            traceback.print_exc()
+        try:
+            if self.cpanel_started:
+                self.bootstrap.expect("bye")
+                self.cpanel.sendline("q")
+        except OSError:
+            traceback.print_exc()
 
     def start_bootstrap(self):
         f = os.path.abspath('out/b_out.txt')
@@ -99,15 +117,15 @@ class Interface:
         w = int(self.app.getEntry("w"))
         h = int(self.app.getEntry("h"))
         msg = "start %d %f %d %d" % (n, r, w, h)
-        self.send_command(port, msg)
+        self.send_servent_command(port, msg)
 
     def user_job_stop(self, _):
         port = str(int(self.app.getEntry("port")))
-        self.send_command(port, "stop " + self.app.getEntry("job_id"))
+        self.send_servent_command(port, "stop " + self.app.getEntry("job_id"))
 
     def user_job_show(self, _):
         port = str(int(self.app.getEntry("port")))
-        self.send_command(port, "show " + self.app.getEntry("job_id"))
+        self.send_servent_command(port, "show " + self.app.getEntry("job_id"))
 
     def user_settings_changed(self, _):
         if self.cpanel_started or self.bootstrap_started:
@@ -132,6 +150,12 @@ class Interface:
                 "ENABLE_CPANEL = %s\n" % ("True" if comm.ENABLE_CPANEL else "False")
             ])
 
+    def user_cpanel_pause(self, _):
+        self.send_cpanel_command("pause")
+
+    def user_cpanel_resume(self, _):
+        self.send_cpanel_command("resume")
+
 
 def set_defaults(the_app):
     the_app.setEntry("Num servents", "3")
@@ -154,12 +178,11 @@ def main():
     app = gui()
     i = Interface(app)
 
+    app.startTabbedFrame("TabbedFrame", 0, sticky="NW")
+    app.startTab("Options")
     row = 0
     app.addLabel("title", "Welcome to CHAOS", row=row, column=0, colspan=12)
     row += 1  # ----
-
-    app.startTabbedFrame("TabbedFrame")
-    app.startTab("Options")
     app.addLabelEntry("BS host", row=row, column=0, colspan=4)
     app.addLabelEntry("BS port", row=row, column=4, colspan=4)
     app.addLabelEntry("CP host", row=row, column=8, colspan=4)
@@ -174,7 +197,8 @@ def main():
     app.stopTab()
     app.startTab("Start")
     row = 0
-
+    app.addLabel("title2", "Welcome to CHAOS", row=row, column=0, colspan=12)
+    row += 1  # ----
     app.addHorizontalSeparator(row=row, column=1, colour="grey")
     app.addButton("Start Bootstrap server", i.user_start_bootstrap, row=row, column=2, colspan=2)
     app.addHorizontalSeparator(row=row, column=4, colour="grey")
@@ -200,10 +224,17 @@ def main():
     row += 1  # ----
     app.addHorizontalSeparator(row=row, column=0, colspan=12, colour="blue")
     row += 1  # ----
+    app.addButton("Pause CPanel", i.user_cpanel_pause, row=row, column=8, colspan=2)
+    app.addButton("Resume CPanel", i.user_cpanel_resume, row=row, column=10, colspan=2)
+    row += 1  # ----
+    app.addHorizontalSeparator(row=row, column=0, colspan=12, colour="blue")
+    row += 1  # ----
     app.addScrolledTextArea("output", row=row, column=0, colspan=12, rowspan=12)
 
     app.stopTab()
     app.stopTabbedFrame()
+
+    app.setTabbedFrameSelectedTab("TabbedFrame", "Start")
 
     set_defaults(app)
     app.setStopFunction(i.user_quit)

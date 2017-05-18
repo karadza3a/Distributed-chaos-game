@@ -10,12 +10,15 @@ class Bootstrap:
     def __init__(self) -> None:
         super().__init__()
         self.thread_lock = threading.Lock()
-        self.communicator = Communicator(BOOTSTRAP_HOST, BOOTSTRAP_PORT, self.received_message)
+        self.communicator = Communicator(BOOTSTRAP_HOST, BOOTSTRAP_PORT, self.received_message, self.quitting)
         self.communicator.start()
         self.servent_id = 0
         self.servents = {}
         if ENABLE_CPANEL:
             self.communicator.send(CPANEL_HOST, CPANEL_PORT, "0 add_bs")
+
+    def quitting(self):
+        self.communicator.cpanel_rm_node()
 
     def received_message(self, host, port, message):
         logging.info("%s:%d > %s" % (host, port, message))

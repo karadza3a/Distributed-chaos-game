@@ -11,13 +11,14 @@ from common.config import *
 
 
 class Communicator(Thread):
-    def __init__(self, host, listen_port, delegate_method) -> None:
+    def __init__(self, host, listen_port, received_delegate, quit_delegate) -> None:
         super().__init__()
         self.server_socket = socket.socket()
         self.host = host
         self.listen_port = listen_port
         self.active = True
-        self.delegate_method = delegate_method
+        self.received_delegate = received_delegate
+        self.quit_delegate = quit_delegate
 
     def run(self) -> None:
         super().run()
@@ -32,6 +33,7 @@ class Communicator(Thread):
                 executor.submit(self.receive_message, client_socket)
             except socket.timeout:
                 pass
+        self.quit_delegate()
         self.server_socket.close()
         executor.shutdown()
 
@@ -80,7 +82,7 @@ class Communicator(Thread):
             else:
                 return
 
-            self.delegate_method(host, port, message)
+            self.received_delegate(host, port, message)
         except Exception:
             logging.exception("Error receiving!")
             raise
@@ -94,6 +96,13 @@ class Communicator(Thread):
                 msg_id = self.cpanel_message_id
                 self.cpanel_message_id += 1
             self.send(CPANEL_HOST, CPANEL_PORT, "%d add_node" % msg_id)
+
+    def cpanel_rm_node(self):
+        if ENABLE_CPANEL:
+            with self.cpanel_message_lock:
+                msg_id = self.cpanel_message_id
+                self.cpanel_message_id += 1
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_node" % msg_id)
 
     def cpanel_add_edge(self, host2, port2, temp):
         if ENABLE_CPANEL:
@@ -116,6 +125,13 @@ class Communicator(Thread):
                 msg_id = self.cpanel_message_id
                 self.cpanel_message_id += 1
             self.send(CPANEL_HOST, CPANEL_PORT, "%d node_id %d" % (msg_id, node_id))
+
+    @staticmethod
+    def cpanel_input_command(msg):
+        with Communicator.cpanel_message_lock:
+            msg_id = Communicator.cpanel_message_id
+            Communicator.cpanel_message_id += 1
+        Communicator._raw_send("input", 0, CPANEL_HOST, CPANEL_PORT, "%d input_cmd %s" % (msg_id, msg))
 
 
 class Msg:

@@ -21,11 +21,14 @@ class Servent:
         job_worker_thread = Thread(target=self.job_worker)
         job_worker_thread.start()
 
-        self.communicator = Communicator(host, port, self.received_message)
+        self.communicator = Communicator(host, port, self.received_message, self.quitting)
         self.communicator.start()
         self.communicator.cpanel_add_node()
         self.communicator.cpanel_add_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT, True)
         self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
+
+    def quitting(self):
+        self.communicator.cpanel_rm_node()
 
     def received_message(self, host, port, message):
         logging.info("%s:%d > %s" % (host, port, message))

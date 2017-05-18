@@ -11,12 +11,17 @@ from servent import node_tools
 class CPanel:
     def __init__(self) -> None:
         super().__init__()
-        self.communicator = Communicator(CPANEL_HOST, CPANEL_PORT, self.received_message)
+        self.delay = 0.05
+        self.show = False
+        self.communicator = Communicator(CPANEL_HOST, CPANEL_PORT, self.received_message, self.quitting)
         self.communicator.start()
         self.graph = nx.Graph()
         self.vertices = {}
 
     last_message_id = {}
+
+    def quitting(self):
+        pass
 
     def received_message(self, host, port, message):
         logging.info("%s:%d > %s" % (host, port, message))
@@ -43,28 +48,33 @@ class CPanel:
         elif "rm_edge" in message:
             n2_id = tokens[2]
             self.graph.remove_edge(n_id, n2_id)
+        elif "rm_node" in message:
+            self.graph.remove_node(n_id)
+        elif "input_cmd" in message:
+            self.input_command(message.replace("%d input_cmd " % m_id, ""))
 
     def display_graph(self):
-        plt.ion()
         plt.rcParams['axes.facecolor'] = 'black'
-        # figplt.figure()
-        plt.show()
-        # manager = plt.get_current_fig_manager()
-        # manager.window.SetPosition((500, 0))
+
         while self.communicator.active:
-            try:
-                plt.clf()
-                graph_copy = nx.Graph(self.graph)
-                pos1 = self.custom_layout(graph_copy)
-                nx.draw_networkx(graph_copy, pos1, node_color="b", font_color="w",
-                                 labels={node: node[-5:] for node in graph_copy},
-                                 edge_color=["b" if graph_copy[u][v]['temp_edge'] else "g" for u, v in
-                                             graph_copy.edges()])
-                plt.xlim(-0.2, 2.2)
-                plt.ylim(-0.2, 1.2)
-            finally:
-                plt.pause(0.05)
-        plt.ioff()
+            plt.ion()
+            plt.show()
+            while self.show and self.communicator.active:
+                try:
+                    plt.clf()
+                    graph_copy = nx.Graph(self.graph)
+                    pos1 = self.custom_layout(graph_copy)
+                    nx.draw_networkx(graph_copy, pos1, node_color="b", font_color="w",
+                                     labels={node: node[-5:] for node in graph_copy},
+                                     edge_color=["b" if graph_copy[u][v]['temp_edge'] else "g" for u, v in
+                                                 graph_copy.edges()])
+                    plt.xlim(-0.2, 2.2)
+                    plt.ylim(-0.2, 1.2)
+                finally:
+                    plt.pause(self.delay)
+            plt.ioff()
+            while not self.show and self.communicator.active:
+                plt.pause(0.5)
         plt.close("all")
 
     @staticmethod
@@ -118,15 +128,32 @@ class CPanel:
 
         return positions
 
+    def input_command(self, input_cmd):
+        try:
+            if input_cmd == "q":
+                self.communicator.active = False
+                print("bye")
+                return True
+            elif input_cmd == "resume":
+                self.show = True
+            elif input_cmd == "pause":
+                self.show = False
+            elif "delay" in input_cmd:
+                self.delay = float(input_cmd.split(" ")[1])
+            else:
+                print("unrecognized")
+                return False
+            print("ok")
+            return False
+        except Exception as e:
+            logging.exception(e)
+
     def input_loop(self):
         while True:
             input_cmd = input("q to quit:")
-            if input_cmd == "q":
+            should_quit = self.input_command(input_cmd)
+            if should_quit:
                 break
-
-        print("Quitting...")
-        self.communicator.active = False
-        print("bye")
 
 
 def main():
@@ -139,16 +166,12 @@ def main():
     print("CPanel listening on port %d..." % CPANEL_PORT)
     input_thread = threading.Thread(target=c.input_loop)
     input_thread.start()
-    c.display_graph()  # this will return only when stopped (active == False) or in case an exception is thrown
+    try:
+        c.display_graph()  # this will return only when stopped (active == False) or in case an exception is thrown
+    except Exception as e:
+        logging.exception("Display error:" + str(e))
     c.communicator.active = False  # this should already be set to False, but just in case any exception is thrown
     c.communicator.join(100)
-
-    # m = Mock()
-    # import threading
-    # t1 = threading.Thread(target=m.while_messages)
-    # t1.start()
-    # m.c = CPanel()
-    # m.c.display_graph()
 
 
 if __name__ == '__main__':
