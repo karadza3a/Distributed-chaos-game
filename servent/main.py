@@ -60,6 +60,8 @@ class Servent:
             self.num_nodes = int(tokens[1])
         elif tokens[0] == Msg.connect_with:
             self.connect_with(host, port, message, tokens)
+        elif tokens[0] == Msg.connect_with_me:
+            self.connect_with_me(int(tokens[1]), host, port)
         elif tokens[0] == Msg.broadcast_new_job:
             # {job_id} {base_points} {ratio} {width} {height}
             job = Chaos(tokens[1], eval(tokens[2]), float(tokens[3]), int(tokens[4]), int(tokens[5]))
