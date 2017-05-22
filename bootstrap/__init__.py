@@ -35,7 +35,7 @@ class Bootstrap:
             if first is None:
                 self.communicator.send(host, port, Msg.bs_only_servent)
             else:
-                self.communicator.send(host, port, "%s (%s:%d)" % (Msg.bs_contact_servent, first[0], first[1]))
+                self.communicator.send(host, port, "%s %s:%d" % (Msg.bs_contact_servent, first[0], first[1]))
         elif tokens[0] == Msg.bs_quit:
             with self.thread_lock:
                 i = int(tokens[1])

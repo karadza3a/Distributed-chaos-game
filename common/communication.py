@@ -110,14 +110,14 @@ class Communicator(Thread):
                 msg_id = self.cpanel_message_id
                 self.cpanel_message_id += 1
             t = "t" if temp else "p"
-            self.send(CPANEL_HOST, CPANEL_PORT, "%d add_edge %s (%s:%d)" % (msg_id, t, host2, port2))
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d add_edge %s %s:%d" % (msg_id, t, host2, port2))
 
     def cpanel_rm_edge(self, host2, port2):
         if ENABLE_CPANEL:
             with self.cpanel_message_lock:
                 msg_id = self.cpanel_message_id
                 self.cpanel_message_id += 1
-            self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_edge (%s:%d)" % (msg_id, host2, port2))
+            self.send(CPANEL_HOST, CPANEL_PORT, "%d rm_edge %s:%d" % (msg_id, host2, port2))
 
     def cpanel_node_id(self, node_id):
         if ENABLE_CPANEL:

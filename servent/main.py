@@ -17,6 +17,7 @@ class Servent:
         self.active_job_id = None
         self.need_job_data_for = None
         self.need_job_data_from = None
+        self.needed_job_data = None
         self.thread_lock = threading.Lock()
         job_worker_thread = Thread(target=self.job_worker)
         job_worker_thread.start()
@@ -38,7 +39,9 @@ class Servent:
             return
 
         if "broadcast" in tokens[0]:
-            self.broadcast(message)
+            new_broadcast = self.broadcast(message)
+            if not new_broadcast:
+                return
 
         while self.id == -1:
             pass
@@ -49,7 +52,7 @@ class Servent:
             self.communicator.cpanel_node_id(self.node.id)
             self.communicator.cpanel_rm_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT)
         elif tokens[0] == Msg.bs_contact_servent:
-            h, p = helpers.extract_host_and_port(tokens[1])
+            h, p = helpers.extract_pair(tokens[1], str, int)
             self.communicator.cpanel_rm_edge(host, port)
             self.communicator.cpanel_add_edge(h, p, True)
             self.contact_servent(h, p)
@@ -70,7 +73,7 @@ class Servent:
             job = Chaos(tokens[1], eval(tokens[2]), float(tokens[3]), int(tokens[4]), int(tokens[5]))
             self.new_job(job)
         elif tokens[0] == Msg.broadcast_show_job:
-            h, p = helpers.extract_host_and_port(tokens[2])
+            h, p = helpers.extract_pair(tokens[2], str, int)
             self.show_job(tokens[1], h, p)
         elif tokens[0] == Msg.broadcast_remove_job:
             self.remove_job(tokens[1])
@@ -81,10 +84,10 @@ class Servent:
 
     broadcasts_cache = set()
 
-    def broadcast(self, message):
+    def broadcast(self, message) -> bool:
         bc_id = message.split(" ")[-1]
         if bc_id in self.broadcasts_cache:
-            return
+            return False
         self.broadcasts_cache.add(bc_id)
 
         if self.node.parent is not None:
@@ -102,6 +105,7 @@ class Servent:
         if self.node.previous is not None:
             h, p = self.node.previous
             self.communicator.send(h, p, message)
+        return True
 
     # ------ received_message methods ------
 
@@ -151,7 +155,7 @@ class Servent:
                     next_node = self.node.next_in_path(node_tools.parent_id(n))
                     if next_node is not None:
                         h, p = next_node
-                        self.communicator.send(host, port, "%s (%s:%d)" % (Msg.bs_contact_servent, h, p))
+                        self.communicator.send(host, port, "%s %s:%d" % (Msg.bs_contact_servent, h, p))
                     else:
                         retry = True
 
@@ -244,9 +248,10 @@ class Servent:
 
     def job_data(self, job_id, node_id, points):
         if self.need_job_data_for == job_id:
-            job = self.active_jobs[job_id]  # type: Chaos
-            job.calculated_points.extend(points)
-            self.need_job_data_from.remove(node_id)
+            with self.thread_lock:
+                if self.need_job_data_for == job_id:
+                    self.needed_job_data.extend(points)
+                    self.need_job_data_from.remove(node_id)
 
     # ------ handle user input ------
 
@@ -258,36 +263,58 @@ class Servent:
             self.job_cnt += 1
             job_id = "%d:%d" % (self.id, self.job_cnt)
             job = Chaos(job_id, random_points(n, width, height), ratio, width, height)
+            self.bc_cnt += 1
+            bc_id = "%d:%d" % (self.id, self.bc_cnt)
 
         print("started job %s!" % job_id)
         self.new_job(job)
-        self.broadcast(job.message())
+        self.broadcast(job.message() + " " + bc_id)
 
     def user_stop_job(self, job_id):
-        self.broadcast(Msg.broadcast_remove_job + job_id)
+        with self.thread_lock:
+            self.bc_cnt += 1
+            bc_id = "%d:%d" % (self.id, self.bc_cnt)
+        self.broadcast(" ".join([Msg.broadcast_remove_job, job_id, bc_id]))
         print("stopping job %s!" % job_id)
         self.remove_job(job_id)
 
     def user_show_job(self, job_id):
         if job_id not in self.active_jobs:
             print("unknown id")
+            return
 
-        self.need_job_data_for = job_id
         assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+        self.need_job_data_for = job_id
         self.need_job_data_from = set([node_id for node_id, a_job_id in assigned_jobs.items() if job_id == a_job_id])
+        self.needed_job_data = []
 
-        my_hp = "(%s:%d)" % (self.communicator.host, self.communicator.listen_port)
-        self.broadcast(" ".join((Msg.broadcast_show_job, job_id, my_hp)))
+        logging.debug(self.need_job_data_from)
+
+        with self.thread_lock:
+            self.bc_cnt += 1
+            bc_id = "%d:%d" % (self.id, self.bc_cnt)
+        my_hp = "%s:%d" % (self.communicator.host, self.communicator.listen_port)
+        msg = " ".join((Msg.broadcast_show_job, job_id, my_hp, bc_id))
+        self.broadcast(msg)
+
+        if job_id == self.active_job_id:
+            points = self.active_jobs[job_id].calculated_points[:]
+            self.job_data(job_id, self.node.id, points)
 
         max_wait_seconds = 15
-        while len(self.need_job_data_from) > 0:
-            if max_wait_seconds < 0:
-                return
-            time.sleep(.1)
-            max_wait_seconds -= .1
+        while True:
+            with self.thread_lock:
+                if len(self.need_job_data_from) == 0 or max_wait_seconds < 0:
+                    self.need_job_data_for = None
+                    self.need_job_data_from = None
+                    break
+            time.sleep(.5)
+            max_wait_seconds -= .5
 
         print("showing...")
-        job = self.active_jobs[job_id]
+        t_job = self.active_jobs[job_id]
+        job = Chaos(job_id, t_job.base_points, t_job.ratio, t_job.width, t_job.height)
+        job.calculated_points = self.needed_job_data
         job.show()
 
 

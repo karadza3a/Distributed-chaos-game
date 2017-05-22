@@ -1,8 +1,9 @@
 import re
+from typing import Any
 
-__host_and_port_r = re.compile("\((.*):(\d+)\)")
+__host_and_port_r = re.compile("(.*):(.*)")
 
 
-def extract_host_and_port(message) -> (str, int):
-    groups = __host_and_port_r.match(message).groups()
-    return groups[0], int(groups[1])
+def extract_pair(string, map_first, map_second) -> (Any, Any):
+    groups = __host_and_port_r.match(string).groups()
+    return map_first(groups[0]), map_second(groups[1])

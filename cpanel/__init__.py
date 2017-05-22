@@ -26,7 +26,7 @@ class CPanel:
     def received_message(self, host, port, message):
         logging.info("%s:%d > %s" % (host, port, message))
         tokens = message.split(" ")
-        n_id = "(%s:%d)" % (host, port)
+        n_id = "%s:%d" % (host, port)
 
         m_id = int(tokens[0])
         if n_id not in self.last_message_id:

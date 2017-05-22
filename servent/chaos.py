@@ -15,9 +15,9 @@ class Chaos:
 
     def calculate_next(self):
         i = random.randint(0, self.n - 1)
-        a = self.base_points[i]
-        b = self.current_point
-        new_point = ((a[0] + b[0]) * self.ratio, (a[1] + b[1]) * self.ratio)
+        a = self.current_point
+        b = self.base_points[i]
+        new_point = (a[0] + (b[0] - a[0]) * self.ratio, a[1] + (b[1] - a[1]) * self.ratio)
         self.current_point = new_point
         self.calculated_points.append(new_point)
 
@@ -38,7 +38,7 @@ def assign_jobs(jobs, total_num_nodes) -> {int: str}:
     # every job should be assigned to at least one node
     if nodes_used > total_num_nodes:
         # if not possible, skip last job
-        return assign_jobs(jobs[:-1], total_num_nodes)
+        return assign_jobs(list(jobs)[:-1], total_num_nodes)
 
     # (job_id, num_nodes, job)
     jobs = sorted([(job.id, 1, job) for job in jobs])
