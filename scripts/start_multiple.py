@@ -23,9 +23,14 @@ class Interface:
         if port in self.servents:
             s = self.servents[port]  # type: pexpect.spawn
             s.send(msg + "\n")
-            s.expect(["started job .*!", "showing...", "unknown id"])
-            output = self.app.getTextArea("output") + "\n" + str(s.match.string)
+            s.expect(["Quitting...", "started job .*!", "stopping job .*!", "showing...", "unknown id"])
+            output = self.app.getTextArea("output") + "\n%s > " % port + str(s.match.string.decode()).strip()
             self.app.setTextArea("output", output)
+            if s.match_index == 0:
+                s.expect("bye")
+                self.servents.pop(port)
+                output = self.app.getTextArea("output") + "\n%s > " % port + str(s.match.string.decode()).strip()
+                self.app.setTextArea("output", output)
         else:
             print("Servent not found")
 
@@ -127,10 +132,14 @@ class Interface:
         port = str(int(self.app.getEntry("port")))
         self.send_servent_command(port, "show " + self.app.getEntry("job_id"))
 
+    def user_quit_servent(self, _):
+        port = str(int(self.app.getEntry("port")))
+        self.send_servent_command(port, "q")
+
     def user_settings_changed(self, _):
         if self.cpanel_started or self.bootstrap_started:
-            # TODO warn that nothing's gonna happen
-            pass
+            self.app.warningBox("Already started!", "You cannot change settings after starting BS and/or CPanel")
+            return
 
         comm.BOOTSTRAP_HOST = self.app.getEntry("BS host")
         comm.BOOTSTRAP_PORT = int(self.app.getEntry("BS port"))
@@ -210,7 +219,8 @@ def main():
     app.addLabel("communicate", "Communicate with local servents (via stdin)", row=row, column=0, colspan=12)
     row += 1  # ----
     app.addLabel("servent_port", "Servent port:", row=row, column=0, colspan=4)
-    app.addNumericEntry("port", row=row, column=4, colspan=8)
+    app.addNumericEntry("port", row=row, column=4, colspan=4)
+    app.addButton("Quit servent", i.user_quit_servent, row=row, column=8, colspan=4)
     row += 1  # ----
     app.addNumericLabelEntry("n", row=row, column=0, colspan=2)
     app.addNumericLabelEntry("r", row=row, column=2, colspan=2)

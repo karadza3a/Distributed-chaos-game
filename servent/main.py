@@ -264,8 +264,9 @@ class Servent:
         self.broadcast(job.message())
 
     def user_stop_job(self, job_id):
-        self.remove_job(job_id)
         self.broadcast(Msg.broadcast_remove_job + job_id)
+        print("stopping job %s!" % job_id)
+        self.remove_job(job_id)
 
     def user_show_job(self, job_id):
         if job_id not in self.active_jobs:
