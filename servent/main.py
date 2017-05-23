@@ -13,7 +13,7 @@ class Servent:
         self.num_nodes = 0
         self.bc_cnt = 0
         self.job_cnt = 0
-        self.active_jobs = {}
+        self.active_jobs = None
         self.active_job_id = None
         self.need_job_data_for = None
         self.need_job_data_from = None
@@ -29,6 +29,7 @@ class Servent:
         self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_new_servent)
 
     def quitting(self):
+        self.communicator.send(BOOTSTRAP_HOST, BOOTSTRAP_PORT, Msg.bs_quit)
         self.communicator.cpanel_rm_node()
 
     def received_message(self, host, port, message):
@@ -47,8 +48,9 @@ class Servent:
             pass
 
         if tokens[0] == Msg.bs_only_servent:
-            self.node.id = 0
+            self.active_jobs = {}
             self.num_nodes = 1
+            self.node.id = 0
             self.communicator.cpanel_node_id(self.node.id)
             self.communicator.cpanel_rm_edge(BOOTSTRAP_HOST, BOOTSTRAP_PORT)
         elif tokens[0] == Msg.bs_contact_servent:
@@ -60,10 +62,13 @@ class Servent:
             self.communicator.cpanel_rm_edge(host, port)
             self.communicator.cpanel_add_edge(host, port, False)
             self.my_child(host, port, tokens[1])
+        elif tokens[0] == Msg.active_jobs:
+            self.active_jobs_message(tokens[1])
         elif tokens[0] == Msg.need_a_parent:
             self.need_a_parent(host, port)
         elif tokens[0] == Msg.broadcast_num_nodes:
             self.num_nodes = int(tokens[1])
+            self.reassign_jobs()
         elif tokens[0] == Msg.connect_with:
             self.connect_with(host, port, message, tokens)
         elif tokens[0] == Msg.connect_with_me:
@@ -79,8 +84,10 @@ class Servent:
             self.remove_job(tokens[1])
         elif tokens[0] == Msg.job_data:
             self.job_data(tokens[1], int(tokens[2]), eval(tokens[3]))
+        elif tokens[0] == Msg.job_data_reassign:
+            self.job_data_reassign(tokens[1], int(tokens[2]), tokens[3])
         else:
-            logging.debug("Unrecognized " + message)
+            logging.debug("Unrecognized: " + message)
 
     broadcasts_cache = set()
 
@@ -134,6 +141,10 @@ class Servent:
                             h, p = self.node.next_in_path(left_child_previous)
                             self.communicator.forward(host, port, h, p,
                                                       "%s %d %d" % (Msg.connect_with, left_child_previous, left_id))
+
+                        jobs = ["%s;%s;%.2f;%d;%d" % (job.id, str(job.base_points).replace(" ", ""), job.ratio,
+                                                      job.width, job.height) for job in self.active_jobs.values()]
+                        self.communicator.send(host, port, "%s %s" % (Msg.active_jobs, "|".join(jobs)))
                     else:
                         retry = True
                 elif n == node_tools.right_child_id(self.node.id):
@@ -146,9 +157,12 @@ class Servent:
                         # tell my left child to connect with right child
                         assert self.node.left_child is not None
                         h, p = self.node.left_child
-                        self.communicator.forward(host, port, h, p,
-                                                  "%s %d %d" % (
-                                                      Msg.connect_with, node_tools.previous_id(right_i), right_i))
+                        self.communicator.forward(host, port, h, p, "%s %d %d" %
+                                                  (Msg.connect_with, node_tools.previous_id(right_i), right_i))
+
+                        jobs = ["%s;%s;%.2f;%d;%d" % (job.id, str(job.base_points).replace(" ", ""), job.ratio,
+                                                      job.width, job.height) for job in self.active_jobs.values()]
+                        self.communicator.send(host, port, "%s %s" % (Msg.active_jobs, "|".join(jobs)))
                     else:
                         retry = True
                 else:
@@ -207,18 +221,43 @@ class Servent:
     # --------- jobs ---------
 
     def job_worker(self):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         while True:
             time.sleep(.5)
             if self.active_job_id is not None:
                 job = self.active_jobs[self.active_job_id]  # type: Chaos
                 job.calculate_next()
 
+    def active_jobs_message(self, token):
+        with self.thread_lock:
+            self.active_jobs = {}
+            if len(token) == 0:
+                return
+            job_strings = token.split("|")
+            for job_string in job_strings:
+                # [{job_id,base_points,ratio,width,height,bc_id}]
+                job_tokens = job_string.split(";")
+                job = Chaos(job_tokens[0],
+                            eval(job_tokens[1]),
+                            float(job_tokens[2]),
+                            int(job_tokens[3]),
+                            int(job_tokens[4]))
+                self.active_jobs[job.id] = job
+
     def new_job(self, job):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         with self.thread_lock:
             self.active_jobs[job.id] = job
-            self.reassign_jobs()
+        self.reassign_jobs()
 
     def remove_job(self, job_id):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         max_wait_seconds = 15
         while job_id not in self.active_jobs:
             if max_wait_seconds < 0:
@@ -230,28 +269,85 @@ class Servent:
             if job_id == self.active_job_id:
                 self.active_job_id = None
             self.active_jobs.pop(job_id)
-            self.reassign_jobs()
+        self.reassign_jobs()
 
     def reassign_jobs(self):
-        assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
-        if self.active_job_id is not None and assigned_jobs[self.node.id] != self.active_job_id:
-            # TODO send old data to new node
-            pass
+        while self.active_jobs is None:
+            time.sleep(.1)
+
+        with self.thread_lock:
+            assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+        old_job_id = self.active_job_id
+        if old_job_id is not None:
+            if self.node.id not in assigned_jobs or assigned_jobs[self.node.id] != old_job_id:
+                # -- I was working on something but I'm not working on that anymore --
+                # new nodes on my old job
+                new_nodes = [node_id for node_id, job_id in assigned_jobs.items() if job_id == old_job_id]
+                if len(new_nodes) > 0:
+                    node_id = random.choice(new_nodes)
+                    points = None
+                    with self.thread_lock:
+                        if old_job_id in self.active_jobs:
+                            job = self.active_jobs[old_job_id]
+                            points = str(job.calculated_points).replace(" ", "")
+                            job.calculated_points = []
+
+                    if points is not None:
+                        next_node = self.node.next_in_path(node_id)
+                        while next_node is None:
+                            next_node = self.node.next_in_path(node_id)
+
+                        self.communicator.send(next_node[0], next_node[1],
+                                               " ".join((Msg.job_data_reassign, old_job_id, str(node_id), points)))
+
         if self.node.id in assigned_jobs:
-            self.active_job_id = assigned_jobs[self.node.id]
+            with self.thread_lock:
+                self.active_job_id = assigned_jobs[self.node.id]
+        logging.debug("assigned_jobs: " + str(assigned_jobs))
 
     def show_job(self, job_id, h, p):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         if job_id == self.active_job_id:
             job = self.active_jobs[job_id]  # type: Chaos
             points = str(job.calculated_points).replace(" ", "")
             self.communicator.send(h, p, " ".join((Msg.job_data, job_id, str(self.node.id), points)))
 
     def job_data(self, job_id, node_id, points):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         if self.need_job_data_for == job_id:
             with self.thread_lock:
                 if self.need_job_data_for == job_id:
                     self.needed_job_data.extend(points)
                     self.need_job_data_from.remove(node_id)
+
+    def job_data_reassign(self, job_id, node_id, points_string):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
+        with self.thread_lock:
+            if self.node.id == node_id:
+                if self.active_job_id == job_id:
+                    self.active_jobs[job_id].calculated_points.extend(eval(points_string))
+                    return
+                else:
+                    with self.thread_lock:
+                        assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+                    new_nodes = [a_node_id for a_node_id, a_job_id in assigned_jobs.items() if a_job_id == job_id]
+                    if len(new_nodes) > 0:
+                        node_id = random.choice(new_nodes)
+                    else:
+                        return
+
+        next_node = self.node.next_in_path(node_id)
+        while next_node is None:
+            next_node = self.node.next_in_path(node_id)
+
+        self.communicator.send(next_node[0], next_node[1],
+                               " ".join((Msg.job_data_reassign, job_id, str(node_id), points_string)))
 
     # ------ handle user input ------
 
@@ -279,16 +375,20 @@ class Servent:
         self.remove_job(job_id)
 
     def user_show_job(self, job_id):
+        while self.active_jobs is None:
+            time.sleep(.1)
+
         if job_id not in self.active_jobs:
             print("unknown id")
             return
 
-        assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
+        with self.thread_lock:
+            assigned_jobs = chaos.assign_jobs(self.active_jobs.values(), self.num_nodes)
         self.need_job_data_for = job_id
         self.need_job_data_from = set([node_id for node_id, a_job_id in assigned_jobs.items() if job_id == a_job_id])
         self.needed_job_data = []
 
-        logging.debug(self.need_job_data_from)
+        logging.debug("need_job_data_from: " + str(self.need_job_data_from))
 
         with self.thread_lock:
             self.bc_cnt += 1
@@ -303,8 +403,8 @@ class Servent:
 
         max_wait_seconds = 15
         while True:
-            with self.thread_lock:
-                if len(self.need_job_data_from) == 0 or max_wait_seconds < 0:
+            if len(self.need_job_data_from) == 0 or max_wait_seconds < 0:
+                with self.thread_lock:
                     self.need_job_data_for = None
                     self.need_job_data_from = None
                     break
@@ -331,6 +431,7 @@ def main():
         input_str = input("q to quit:")
         try:
             if input_str == "q":
+                s.user_quit()
                 break
             if "start" in input_str:
                 tokens = input_str.split(" ")

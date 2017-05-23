@@ -149,3 +149,5 @@ class Msg:
     broadcast_remove_job = "broadcast_remove_job"
     broadcast_show_job = "broadcast_show_job"
     job_data = "job_data"
+    job_data_reassign = "job_data_reassign"
+    active_jobs = "active_jobs"

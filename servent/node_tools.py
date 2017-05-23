@@ -32,7 +32,7 @@ class Node:
         if len(ds) == 0:
             return None
         ds.sort()
-        logging.debug(ds)
+        logging.debug("Distances: " + str(ds))
         d, preference, node = ds[0]
         return node
 

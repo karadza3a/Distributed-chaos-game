@@ -17,24 +17,30 @@ class Chaos:
         i = random.randint(0, self.n - 1)
         a = self.current_point
         b = self.base_points[i]
-        new_point = (a[0] + (b[0] - a[0]) * self.ratio, a[1] + (b[1] - a[1]) * self.ratio)
-        self.current_point = new_point
-        self.calculated_points.append(new_point)
+        x = a[0] + (b[0] - a[0]) * self.ratio
+        y = a[1] + (b[1] - a[1]) * self.ratio
+        self.current_point = x, y
+        self.calculated_points.append((int(x), int(y)))
 
     def show(self):
         import matplotlib.pyplot as plt
         plt.scatter(*zip(*self.base_points), s=20)
-        plt.scatter(*zip(*self.calculated_points), s=1)
+        if len(self.calculated_points) > 0:
+            x, y = zip(*self.calculated_points)
+            plt.scatter(x, y, s=1)
         plt.show()
 
     def message(self):
-        return " ".join((Msg.broadcast_new_job, self.id, str(self.base_points).replace(" ", ""), str(self.ratio),
+        return " ".join((Msg.broadcast_new_job, self.id, str(self.base_points).replace(" ", ""), "%.2f" % self.ratio,
                          str(self.width), str(self.height)))
 
 
 # returns dict with node_tree_id -> job_id
 def assign_jobs(jobs, total_num_nodes) -> {int: str}:
     nodes_used = len(jobs)
+    if nodes_used == 0:
+        return {}
+
     # every job should be assigned to at least one node
     if nodes_used > total_num_nodes:
         # if not possible, skip last job
